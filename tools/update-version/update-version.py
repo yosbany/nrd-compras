@@ -35,13 +35,29 @@ def update_version():
     )
     
     # Add version parameter to JS files (except Firebase CDN and external libraries)
-    html = re.sub(
-        r'(<script[^>]*src=["\'])(logger\.js|modal\.js|auth\.js|tabs/purchase-orders\.js|tabs/suppliers\.js|app\.js)(["\'][^>]*>)',
-        rf'\1\2?v={version}\3',
-        html
-    )
+    js_files = ['logger.js', 'modal.js', 'auth.js', 'tabs/purchase-orders.js', 'tabs/suppliers.js', 'app.js']
+    for js_file in js_files:
+        # Remove existing version parameter first
+        html = re.sub(
+            rf'(<script[^>]*src=["\'])({re.escape(js_file)})(\?v=\d+)?(["\']])',
+            rf'\1\2\4',
+            html
+        )
+        # Add new version parameter
+        html = re.sub(
+            rf'(<script[^>]*src=["\'])({re.escape(js_file)})(["\'][^>]*>)',
+            rf'\1\2?v={version}\3',
+            html
+        )
     
     # Add version parameter to service worker
+    # Remove existing version parameter first
+    html = re.sub(
+        r'(serviceWorker\.register\(["\'])(service-worker\.js)(\?v=\d+)?(["\'])',
+        r'\1\2\4',
+        html
+    )
+    # Add new version parameter
     html = re.sub(
         r'(serviceWorker\.register\(["\'])(service-worker\.js)(["\'])',
         rf'\1\2?v={version}\3',
