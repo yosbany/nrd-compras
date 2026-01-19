@@ -2,6 +2,9 @@
 
 let purchaseOrdersListener = null;
 let purchaseOrdersSearchTerm = '';
+let purchaseOrderItems = []; // Array of { productId, productName, quantity, price }
+let productSearchTimeout = null;
+let isEditingPurchaseOrder = false;
 
 // Helper function to escape HTML
 function escapeHtml(text) {
@@ -32,14 +35,21 @@ function loadPurchaseOrders() {
   // Ensure nrd is available - wait for it if needed
   if (!window.nrd || !window.nrd.purchaseOrders) {
     logger.warn('NRD Data Access library not ready, waiting...');
-    // Retry after a short delay (will be called again from switchView when needed)
-    setTimeout(() => {
+    // Wait for library with multiple retries
+    let retries = 0;
+    const maxRetries = 50; // 5 seconds max (50 * 100ms)
+    const checkLibrary = () => {
       if (window.nrd && window.nrd.purchaseOrders) {
         loadPurchaseOrders();
+      } else if (retries < maxRetries) {
+        retries++;
+        setTimeout(checkLibrary, 100);
       } else {
-        ordersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error: Librería de acceso a datos no disponible</p>';
+        logger.error('NRD Data Access library not available after timeout');
+        ordersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error: Librería de acceso a datos no disponible. Por favor recarga la página.</p>';
       }
-    }, 100);
+    };
+    setTimeout(checkLibrary, 100);
     return;
   }
 
@@ -140,6 +150,12 @@ function showPurchaseOrderForm(orderId = null) {
     formElement.reset();
     const orderIdInput = document.getElementById('purchase-order-id');
     if (orderIdInput) orderIdInput.value = orderId || '';
+    
+    // Reset items
+    purchaseOrderItems = [];
+    isEditingPurchaseOrder = !!orderId;
+    renderPurchaseOrderItems();
+    updatePurchaseOrderTotal();
   }
 
   const formHeader = document.getElementById('purchase-order-form-header');
@@ -147,6 +163,7 @@ function showPurchaseOrderForm(orderId = null) {
   const saveBtn = document.getElementById('save-purchase-order-btn');
   
   if (orderId) {
+    isEditingPurchaseOrder = true;
     if (title) title.textContent = 'Editar Orden de Compra';
     if (subtitle) subtitle.textContent = 'Modifique la información de la orden de compra';
     if (formHeader) {
@@ -170,6 +187,11 @@ function showPurchaseOrderForm(orderId = null) {
         if (supplierInput) supplierInput.value = order.supplierId || '';
         if (supplierSearchInput) supplierSearchInput.value = order.supplierName || '';
         if (statusInput) statusInput.value = order.status || 'Pendiente';
+        
+        // Load items
+        purchaseOrderItems = order.items || [];
+        renderPurchaseOrderItems();
+        updatePurchaseOrderTotal();
       }
     })();
   } else {
@@ -339,12 +361,19 @@ if (purchaseOrderFormElement) {
 
     showSpinner('Guardando orden de compra...');
     try {
+      // Calculate total (only if editing, otherwise 0)
+      const total = isEditingPurchaseOrder 
+        ? purchaseOrderItems.reduce((sum, item) => {
+            return sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0));
+          }, 0)
+        : 0;
+      
       const orderData = {
         supplierId,
         supplierName,
         status: status || 'Pendiente',
-        total: 0,
-        items: []
+        total: total,
+        items: purchaseOrderItems
       };
       if (orderNumber) orderData.orderNumber = orderNumber;
       
@@ -435,15 +464,17 @@ function setupSupplierSearch() {
           .slice(0, 10);
         
         if (matches.length === 0) {
-          supplierResults.innerHTML = '<div class="p-2 text-sm text-gray-500">No se encontraron proveedores</div>';
+          supplierResults.innerHTML = '<div class="p-4 text-base text-gray-500 text-center">No se encontraron proveedores</div>';
           supplierResults.classList.remove('hidden');
           return;
         }
         
         supplierResults.innerHTML = matches.map(([id, supplier]) => `
-          <div class="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200" data-supplier-id="${id}" data-supplier-name="${escapeHtml(supplier.name)}">
-            <div class="font-medium text-sm">${escapeHtml(supplier.name)}</div>
-            ${supplier.phone ? `<div class="text-xs text-gray-500">${escapeHtml(supplier.phone)}</div>` : ''}
+          <div class="p-4 hover:bg-gray-50 active:bg-gray-100 cursor-pointer border-b border-gray-200 touch-target" 
+            data-supplier-id="${id}" 
+            data-supplier-name="${escapeHtml(supplier.name)}">
+            <div class="font-medium text-base mb-1">${escapeHtml(supplier.name)}</div>
+            ${supplier.phone ? `<div class="text-sm text-gray-500">${escapeHtml(supplier.phone)}</div>` : ''}
           </div>
         `).join('');
         
@@ -473,10 +504,325 @@ function setupSupplierSearch() {
   });
 }
 
+// Render purchase order items
+function renderPurchaseOrderItems() {
+  const itemsList = document.getElementById('purchase-order-items-list');
+  if (!itemsList) return;
+  
+  if (purchaseOrderItems.length === 0) {
+    itemsList.innerHTML = '<p class="text-base text-gray-500 text-center py-8">No hay productos agregados</p>';
+    return;
+  }
+  
+  // When creating a new order, only show quantity. When editing, show price and subtotal too.
+  const showPrices = isEditingPurchaseOrder;
+  
+  itemsList.innerHTML = purchaseOrderItems.map((item, index) => `
+    <div class="border border-gray-200 p-4 rounded-lg bg-white" data-item-index="${index}">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <div class="flex-1 min-w-0">
+          <div class="font-medium text-base">${escapeHtml(item.productName || 'Producto')}</div>
+        </div>
+        <button type="button" class="remove-item-btn flex-shrink-0 w-10 h-10 flex items-center justify-center text-red-600 hover:bg-red-50 active:bg-red-100 border border-red-300 rounded-full text-lg font-light transition-colors" data-item-index="${index}" aria-label="Eliminar">
+          ×
+        </button>
+      </div>
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center gap-3">
+          <label class="text-sm text-gray-600 whitespace-nowrap min-w-[80px]">Cantidad:</label>
+          <input type="number" min="1" step="1" value="${item.quantity || 1}" 
+            class="item-quantity flex-1 px-4 py-3 text-base border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-red-600 bg-white" 
+            data-item-index="${index}"
+            placeholder="Cantidad">
+        </div>
+        ${showPrices ? `
+        <div class="flex items-center gap-3">
+          <label class="text-sm text-gray-600 whitespace-nowrap min-w-[80px]">Precio:</label>
+          <input type="number" min="0" step="0.01" value="${parseFloat(item.price || 0).toFixed(2)}" 
+            class="item-price flex-1 px-4 py-3 text-base border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-red-600 bg-white" 
+            data-item-index="${index}"
+            placeholder="0.00">
+        </div>
+        <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+          <span class="text-sm text-gray-600">Subtotal:</span>
+          <span class="text-base font-semibold text-gray-900">
+            $${(parseFloat(item.price || 0) * parseFloat(item.quantity || 1)).toFixed(2)}
+          </span>
+        </div>
+        ` : ''}
+      </div>
+    </div>
+  `).join('');
+  
+  // Attach event listeners to quantity and price inputs
+  itemsList.querySelectorAll('.item-quantity').forEach(input => {
+    input.addEventListener('change', (e) => {
+      const index = parseInt(e.target.dataset.itemIndex);
+      updateItemQuantity(index, e.target.value);
+    });
+  });
+  
+  if (showPrices) {
+    itemsList.querySelectorAll('.item-price').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const index = parseInt(e.target.dataset.itemIndex);
+        updateItemPrice(index, e.target.value);
+      });
+    });
+  }
+  
+  // Attach event listeners to remove buttons
+  itemsList.querySelectorAll('.remove-item-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const index = parseInt(e.target.dataset.itemIndex);
+      removeItemFromOrder(index);
+    });
+  });
+}
+
+// Update purchase order total
+function updatePurchaseOrderTotal() {
+  const totalElement = document.getElementById('purchase-order-total');
+  const totalContainer = document.getElementById('purchase-order-total-container');
+  if (!totalElement || !totalContainer) return;
+  
+  // Only show total when editing (when prices are available)
+  if (!isEditingPurchaseOrder) {
+    totalContainer.classList.add('hidden');
+    return;
+  }
+  
+  totalContainer.classList.remove('hidden');
+  const total = purchaseOrderItems.reduce((sum, item) => {
+    return sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 1));
+  }, 0);
+  
+  totalElement.textContent = `$${total.toFixed(2)}`;
+}
+
+// Add product to order
+function addProductToOrder(product) {
+  if (!product || !product.id) return;
+  
+  // Check if product already exists
+  const existingIndex = purchaseOrderItems.findIndex(item => item.productId === product.id);
+  if (existingIndex >= 0) {
+    // Increment quantity if already exists
+    purchaseOrderItems[existingIndex].quantity = (parseFloat(purchaseOrderItems[existingIndex].quantity || 1) + 1);
+  } else {
+    // Add new item - only include price when editing
+    const newItem = {
+      productId: product.id,
+      productName: product.name || 'Producto',
+      quantity: 1
+    };
+    
+    // Only add price if editing an existing order
+    if (isEditingPurchaseOrder) {
+      newItem.price = parseFloat(product.price || 0);
+    }
+    
+    purchaseOrderItems.push(newItem);
+  }
+  
+  renderPurchaseOrderItems();
+  updatePurchaseOrderTotal();
+  
+  // Hide search
+  const searchContainer = document.getElementById('product-search-container');
+  const searchInput = document.getElementById('purchase-order-product-search');
+  if (searchContainer) searchContainer.classList.add('hidden');
+  if (searchInput) searchInput.value = '';
+}
+
+// Remove item from order
+function removeItemFromOrder(index) {
+  if (index >= 0 && index < purchaseOrderItems.length) {
+    purchaseOrderItems.splice(index, 1);
+    renderPurchaseOrderItems();
+    updatePurchaseOrderTotal();
+  }
+}
+
+// Update item quantity
+function updateItemQuantity(index, quantity) {
+  if (index >= 0 && index < purchaseOrderItems.length) {
+    const qty = parseFloat(quantity) || 1;
+    if (qty > 0) {
+      purchaseOrderItems[index].quantity = qty;
+      renderPurchaseOrderItems();
+      updatePurchaseOrderTotal();
+    }
+  }
+}
+
+// Update item price
+function updateItemPrice(index, price) {
+  if (index >= 0 && index < purchaseOrderItems.length) {
+    const prc = parseFloat(price) || 0;
+    if (prc >= 0) {
+      purchaseOrderItems[index].price = prc;
+      renderPurchaseOrderItems();
+      updatePurchaseOrderTotal();
+    }
+  }
+}
+
+// Setup product search
+function setupProductSearch() {
+  const addProductBtn = document.getElementById('add-product-btn');
+  const loadAllProductsBtn = document.getElementById('load-all-products-btn');
+  const searchContainer = document.getElementById('product-search-container');
+  const searchInput = document.getElementById('purchase-order-product-search');
+  const searchResults = document.getElementById('purchase-order-product-search-results');
+  
+  if (!addProductBtn || !searchContainer || !searchInput || !searchResults) return;
+  
+  // Show search when add button is clicked
+  addProductBtn.addEventListener('click', () => {
+    searchContainer.classList.remove('hidden');
+    searchInput.focus();
+  });
+  
+  // Search products
+  searchInput.addEventListener('input', (e) => {
+    const searchTerm = e.target.value.trim();
+    
+    clearTimeout(productSearchTimeout);
+    
+    if (searchTerm.length < 2) {
+      searchResults.classList.add('hidden');
+      return;
+    }
+    
+    productSearchTimeout = setTimeout(async () => {
+      try {
+        const products = await window.nrd.products.getAll();
+        const productsArray = Array.isArray(products) 
+          ? products 
+          : Object.entries(products || {}).map(([id, product]) => ({ ...product, id }));
+        
+        // Filter active products
+        const activeProducts = productsArray.filter(p => p.active !== false);
+        
+        const matches = activeProducts
+          .filter(product => {
+            const name = (product.name || '').toLowerCase();
+            const sku = (product.sku || '').toLowerCase();
+            const searchLower = searchTerm.toLowerCase();
+            return name.includes(searchLower) || sku.includes(searchLower);
+          })
+          .slice(0, 10);
+        
+        if (matches.length === 0) {
+          searchResults.innerHTML = '<div class="p-4 text-base text-gray-500 text-center">No se encontraron productos</div>';
+          searchResults.classList.remove('hidden');
+          return;
+        }
+        
+        searchResults.innerHTML = matches.map(product => `
+          <div class="p-4 hover:bg-gray-50 active:bg-gray-100 cursor-pointer border-b border-gray-200 product-result touch-target" 
+            data-product-id="${escapeHtml(product.id)}"
+            data-product-name="${escapeHtml(product.name || 'Producto')}"
+            data-product-price="${product.price || 0}">
+            <div class="font-medium text-base mb-1">${escapeHtml(product.name || 'Producto')}</div>
+            ${product.sku ? `<div class="text-xs text-gray-500 mb-1">SKU: ${escapeHtml(product.sku)}</div>` : ''}
+            <div class="text-sm text-gray-600">Precio: $${parseFloat(product.price || 0).toFixed(2)}</div>
+          </div>
+        `).join('');
+        
+        // Attach click handlers
+        searchResults.querySelectorAll('.product-result').forEach(item => {
+          item.addEventListener('click', () => {
+            const product = {
+              id: item.dataset.productId,
+              name: item.dataset.productName,
+              price: parseFloat(item.dataset.productPrice || 0)
+            };
+            addProductToOrder(product);
+            searchResults.classList.add('hidden');
+            searchInput.value = '';
+          });
+        });
+        
+        searchResults.classList.remove('hidden');
+      } catch (error) {
+        logger.error('Error searching products', error);
+      }
+    }, 300);
+  });
+  
+  // Load all products
+  if (loadAllProductsBtn) {
+    loadAllProductsBtn.addEventListener('click', async () => {
+      const supplierId = document.getElementById('purchase-order-supplier').value;
+      
+      if (!supplierId) {
+        await showError('Primero debe seleccionar un proveedor');
+        return;
+      }
+      
+      showSpinner('Cargando productos...');
+      try {
+        const products = await window.nrd.products.getAll();
+        const productsArray = Array.isArray(products) 
+          ? products 
+          : Object.entries(products || {}).map(([id, product]) => ({ ...product, id }));
+        
+        // Filter active products
+        const activeProducts = productsArray.filter(p => p.active !== false);
+        
+        // Add all products - only include price when editing
+        activeProducts.forEach(product => {
+          const existingIndex = purchaseOrderItems.findIndex(item => item.productId === product.id);
+          if (existingIndex < 0) {
+            const newItem = {
+              productId: product.id,
+              productName: product.name || 'Producto',
+              quantity: 1
+            };
+            
+            // Only add price if editing an existing order
+            if (isEditingPurchaseOrder) {
+              newItem.price = parseFloat(product.price || 0);
+            }
+            
+            purchaseOrderItems.push(newItem);
+          }
+        });
+        
+        renderPurchaseOrderItems();
+        updatePurchaseOrderTotal();
+        hideSpinner();
+        
+        if (activeProducts.length > 0) {
+          await showSuccess(`${activeProducts.length} productos agregados`);
+        } else {
+          await showInfo('No hay productos activos disponibles');
+        }
+      } catch (error) {
+        hideSpinner();
+        logger.error('Error loading products', error);
+        await showError('Error al cargar productos: ' + error.message);
+      }
+    });
+  }
+  
+  // Hide results when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!searchInput.contains(e.target) && !searchResults.contains(e.target) && !addProductBtn.contains(e.target)) {
+      searchResults.classList.add('hidden');
+    }
+  });
+}
+
 // Setup event listeners
 function setupPurchaseOrderEventListeners() {
   // Setup supplier search
   setupSupplierSearch();
+  
+  // Setup product search and items management
+  setupProductSearch();
   
   // Search input
   const searchInput = document.getElementById('purchase-orders-search-input');

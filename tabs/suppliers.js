@@ -23,14 +23,21 @@ function loadSuppliers() {
   // Ensure nrd is available - wait for it if needed
   if (!window.nrd || !window.nrd.suppliers) {
     logger.warn('NRD Data Access library not ready, waiting...');
-    // Retry after a short delay (will be called again from switchView when needed)
-    setTimeout(() => {
+    // Wait for library with multiple retries
+    let retries = 0;
+    const maxRetries = 50; // 5 seconds max (50 * 100ms)
+    const checkLibrary = () => {
       if (window.nrd && window.nrd.suppliers) {
         loadSuppliers();
+      } else if (retries < maxRetries) {
+        retries++;
+        setTimeout(checkLibrary, 100);
       } else {
-        suppliersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error: Librería de acceso a datos no disponible</p>';
+        logger.error('NRD Data Access library not available after timeout');
+        suppliersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error: Librería de acceso a datos no disponible. Por favor recarga la página.</p>';
       }
-    }, 100);
+    };
+    setTimeout(checkLibrary, 100);
     return;
   }
   
