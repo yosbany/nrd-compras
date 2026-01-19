@@ -3,6 +3,9 @@
 let suppliersListener = null;
 let suppliersSearchTerm = '';
 
+// Ensure nrd is accessible from window
+const nrd = window.nrd;
+
 // Helper function to escape HTML
 function escapeHtml(text) {
   if (!text) return '';
@@ -17,6 +20,13 @@ function loadSuppliers() {
   const suppliersList = document.getElementById('suppliers-list');
   if (!suppliersList) {
     logger.warn('Suppliers list element not found');
+    return;
+  }
+  
+  // Ensure nrd is available
+  if (!nrd || !nrd.suppliers) {
+    logger.error('NRD Data Access library not initialized or suppliers service not available');
+    suppliersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error: Librería de acceso a datos no disponible</p>';
     return;
   }
   

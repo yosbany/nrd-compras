@@ -7,7 +7,7 @@
   <title>NRD Compras</title>
   <link rel="manifest" href="manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="styles.css?v=1768859314896">
+  <link rel="stylesheet" href="styles.css?v=1768859577212">
   <meta name="theme-color" content="#dc2626">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -41,7 +41,7 @@
     <div class="w-full max-w-sm">
       <h1 class="text-xl sm:text-2xl font-light text-center mb-6 sm:mb-8 tracking-tight">NRD Compras</h1>
       <form id="login-form" class="space-y-3 sm:space-y-4">
-        <input type="email" id="login-email" placeholder="Email" required 
+        <input type="email" id="login-email" placeholder="Email" required autocomplete="email"
           class="w-full px-0 py-2.5 sm:py-3 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
         <input type="password" id="login-password" placeholder="Contraseña" required autocomplete="current-password"
           class="w-full px-0 py-2.5 sm:py-3 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
@@ -366,18 +366,18 @@
   </script>
   
   <!-- App Scripts -->
-  <script src="logger.js?v=1768859314896"></script>
-  <script src="modal.js?v=1768859314896"></script>
-  <script src="auth.js?v=1768859314896"></script>
-  <script src="tabs/purchase-orders.js?v=1768859314896"></script>
-  <script src="tabs/suppliers.js?v=1768859314896"></script>
-  <script src="app.js?v=1768859314896"></script>
+  <script src="logger.js?v=1768859577212"></script>
+  <script src="modal.js?v=1768859577212"></script>
+  <script src="auth.js?v=1768859577212"></script>
+  <script src="tabs/purchase-orders.js?v=1768859577212"></script>
+  <script src="tabs/suppliers.js?v=1768859577212"></script>
+  <script src="app.js?v=1768859577212"></script>
 
   <script>
     // Register service worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js?v=1768859314896')
+        navigator.serviceWorker.register('service-worker.js?v=1768859577212')
           .then(reg => {
             logger.info('Service Worker registered');
             reg.addEventListener('updatefound', () => {
