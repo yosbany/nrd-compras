@@ -29,13 +29,23 @@ function loadPurchaseOrders() {
     purchaseOrdersListener = null;
   }
 
-  // Listen for purchase orders using Firebase directly (purchaseOrders service not yet in NRD Data Access)
+  // Ensure nrd is available - wait for it if needed
+  if (!window.nrd || !window.nrd.purchaseOrders) {
+    logger.warn('NRD Data Access library not ready, waiting...');
+    // Retry after a short delay (will be called again from switchView when needed)
+    setTimeout(() => {
+      if (window.nrd && window.nrd.purchaseOrders) {
+        loadPurchaseOrders();
+      } else {
+        ordersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error: Librería de acceso a datos no disponible</p>';
+      }
+    }, 100);
+    return;
+  }
+
+  // Listen for purchase orders using NRD Data Access
   logger.debug('Setting up purchase orders listener');
-  const ordersRef = firebase.database().ref('purchaseOrders');
-  purchaseOrdersListener = () => ordersRef.off('value');
-  
-  ordersRef.on('value', (snapshot) => {
-    const orders = snapshot.val() || {};
+  purchaseOrdersListener = window.nrd.purchaseOrders.onValue((orders) => {
     logger.debug('Purchase orders data received', { count: Array.isArray(orders) ? orders.length : Object.keys(orders || {}).length });
     if (!ordersList) return;
     ordersList.innerHTML = '';
@@ -109,9 +119,6 @@ function loadPurchaseOrders() {
       item.addEventListener('click', () => viewPurchaseOrder(id));
       ordersList.appendChild(item);
     });
-  }, (error) => {
-    logger.error('Error loading purchase orders', error);
-    ordersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error al cargar órdenes de compra</p>';
   });
 }
 
@@ -152,10 +159,8 @@ function showPurchaseOrderForm(orderId = null) {
     }
     // Load order data
     (async () => {
-      const snapshot = await firebase.database().ref(`purchaseOrders/${orderId}`).once('value');
-      const order = snapshot.val();
+      const order = await window.nrd.purchaseOrders.getById(orderId);
       if (order) {
-        order.id = orderId;
         const numberInput = document.getElementById('purchase-order-number');
         const supplierInput = document.getElementById('purchase-order-supplier');
         const supplierSearchInput = document.getElementById('purchase-order-supplier-search');
@@ -197,9 +202,7 @@ async function viewPurchaseOrder(orderId) {
   logger.debug('Viewing purchase order', { orderId });
   showSpinner('Cargando orden de compra...');
   try {
-    const snapshot = await firebase.database().ref(`purchaseOrders/${orderId}`).once('value');
-    const order = snapshot.val();
-    if (order) order.id = orderId;
+    const order = await window.nrd.purchaseOrders.getById(orderId);
     hideSpinner();
     if (!order) {
       logger.warn('Purchase order not found', { orderId });
@@ -290,20 +293,17 @@ async function viewPurchaseOrder(orderId) {
 // Save purchase order
 async function savePurchaseOrder(orderId, orderData) {
   const user = getCurrentUser();
-  const ordersRef = firebase.database().ref('purchaseOrders');
   
   if (orderId) {
     logger.info('Updating purchase order', { orderId });
-    await ordersRef.child(orderId).update(orderData);
+    await window.nrd.purchaseOrders.update(orderId, orderData);
     logger.audit('ENTITY_UPDATE', { entity: 'purchaseOrder', id: orderId, data: orderData, uid: user?.uid, email: user?.email, timestamp: Date.now() });
     logger.info('Purchase order updated successfully', { orderId });
     return { key: orderId };
   } else {
     logger.info('Creating new purchase order', { supplierId: orderData.supplierId });
-    const newRef = ordersRef.push();
     orderData.createdAt = Date.now();
-    await newRef.set(orderData);
-    const id = newRef.key;
+    const id = await window.nrd.purchaseOrders.create(orderData);
     logger.audit('ENTITY_CREATE', { entity: 'purchaseOrder', id, data: orderData, uid: user?.uid, email: user?.email, timestamp: Date.now() });
     logger.info('Purchase order created successfully', { id });
     return { key: id, getKey: () => id };
@@ -330,7 +330,7 @@ if (purchaseOrderFormElement) {
     let supplierName = '';
     if (supplierId) {
       try {
-        const supplier = await nrd.suppliers.getById(supplierId);
+        const supplier = await window.nrd.suppliers.getById(supplierId);
         supplierName = supplier ? supplier.name : '';
       } catch (error) {
         logger.error('Error loading supplier', error);
@@ -382,7 +382,7 @@ async function deletePurchaseOrderHandler(orderId) {
   logger.info('Deleting purchase order', { orderId });
   showSpinner('Eliminando orden de compra...');
   try {
-    await firebase.database().ref(`purchaseOrders/${orderId}`).remove();
+    await window.nrd.purchaseOrders.delete(orderId);
     logger.audit('ENTITY_DELETE', { entity: 'purchaseOrder', id: orderId, uid: user?.uid, email: user?.email, timestamp: Date.now() });
     logger.info('Purchase order deleted successfully', { orderId });
     hideSpinner();
@@ -417,7 +417,7 @@ function setupSupplierSearch() {
     
     searchTimeout = setTimeout(async () => {
       try {
-        const suppliersArray = await nrd.suppliers.getAll();
+        const suppliersArray = await window.nrd.suppliers.getAll();
         const suppliers = Array.isArray(suppliersArray) 
           ? suppliersArray.reduce((acc, supplier) => {
               if (supplier && supplier.id) {

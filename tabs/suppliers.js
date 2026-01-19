@@ -3,9 +3,6 @@
 let suppliersListener = null;
 let suppliersSearchTerm = '';
 
-// Ensure nrd is accessible from window
-const nrd = window.nrd;
-
 // Helper function to escape HTML
 function escapeHtml(text) {
   if (!text) return '';
@@ -23,10 +20,17 @@ function loadSuppliers() {
     return;
   }
   
-  // Ensure nrd is available
-  if (!nrd || !nrd.suppliers) {
-    logger.error('NRD Data Access library not initialized or suppliers service not available');
-    suppliersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error: Librería de acceso a datos no disponible</p>';
+  // Ensure nrd is available - wait for it if needed
+  if (!window.nrd || !window.nrd.suppliers) {
+    logger.warn('NRD Data Access library not ready, waiting...');
+    // Retry after a short delay (will be called again from switchView when needed)
+    setTimeout(() => {
+      if (window.nrd && window.nrd.suppliers) {
+        loadSuppliers();
+      } else {
+        suppliersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error: Librería de acceso a datos no disponible</p>';
+      }
+    }, 100);
     return;
   }
   
@@ -41,7 +45,7 @@ function loadSuppliers() {
 
   // Listen for suppliers using NRD Data Access
   logger.debug('Setting up suppliers listener');
-  suppliersListener = nrd.suppliers.onValue((suppliers) => {
+  suppliersListener = window.window.nrd.suppliers.onValue((suppliers) => {
     logger.debug('Suppliers data received', { count: Array.isArray(suppliers) ? suppliers.length : Object.keys(suppliers || {}).length });
     if (!suppliersList) return;
     suppliersList.innerHTML = '';
@@ -139,7 +143,7 @@ function showSupplierForm(supplierId = null) {
       saveBtn.classList.add('bg-blue-600', 'border-blue-600', 'hover:bg-blue-700');
     }
     (async () => {
-      const supplier = await nrd.suppliers.getById(supplierId);
+      const supplier = await window.nrd.suppliers.getById(supplierId);
       if (supplier) {
         const nameInput = document.getElementById('supplier-name');
         const phoneInput = document.getElementById('supplier-phone');
@@ -183,13 +187,13 @@ async function saveSupplier(supplierId, supplierData) {
   const user = getCurrentUser();
   if (supplierId) {
     logger.info('Updating supplier', { supplierId, name: supplierData.name });
-    await nrd.suppliers.update(supplierId, supplierData);
+    await window.nrd.suppliers.update(supplierId, supplierData);
     logger.audit('ENTITY_UPDATE', { entity: 'supplier', id: supplierId, data: supplierData, uid: user?.uid, email: user?.email, timestamp: Date.now() });
     logger.info('Supplier updated successfully', { supplierId });
     return { key: supplierId };
   } else {
     logger.info('Creating new supplier', { name: supplierData.name });
-    const id = await nrd.suppliers.create(supplierData);
+    const id = await window.nrd.suppliers.create(supplierData);
     logger.audit('ENTITY_CREATE', { entity: 'supplier', id, data: supplierData, uid: user?.uid, email: user?.email, timestamp: Date.now() });
     logger.info('Supplier created successfully', { id, name: supplierData.name });
     return { key: id, getKey: () => id };
@@ -201,7 +205,7 @@ async function viewSupplier(supplierId) {
   logger.debug('Viewing supplier', { supplierId });
   showSpinner('Cargando proveedor...');
   try {
-    const supplier = await nrd.suppliers.getById(supplierId);
+    const supplier = await window.nrd.suppliers.getById(supplierId);
     hideSpinner();
     if (!supplier) {
       logger.warn('Supplier not found', { supplierId });
@@ -297,7 +301,7 @@ async function deleteSupplierHandler(supplierId) {
   logger.info('Deleting supplier', { supplierId });
   showSpinner('Eliminando proveedor...');
   try {
-    await nrd.suppliers.delete(supplierId);
+    await window.nrd.suppliers.delete(supplierId);
     logger.audit('ENTITY_DELETE', { entity: 'supplier', id: supplierId, uid: user?.uid, email: user?.email, timestamp: Date.now() });
     logger.info('Supplier deleted successfully', { supplierId });
     hideSpinner();
@@ -401,7 +405,7 @@ function setupSupplierEventListeners() {
 function initializeSuppliers() {
   logger.debug('Initializing suppliers module');
   setupSupplierEventListeners();
-  loadSuppliers();
+  // Don't load suppliers here - they will be loaded when the view is switched to suppliers
 }
 
 // Initialize when DOM is ready
