@@ -1,0 +1,543 @@
+// Purchase Order management
+
+let purchaseOrdersListener = null;
+let purchaseOrdersSearchTerm = '';
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Load purchase orders
+function loadPurchaseOrders() {
+  logger.debug('Loading purchase orders');
+  const ordersList = document.getElementById('purchase-orders-list');
+  if (!ordersList) {
+    logger.warn('Purchase orders list element not found');
+    return;
+  }
+  
+  ordersList.innerHTML = '';
+
+  // Remove previous listener
+  if (purchaseOrdersListener) {
+    logger.debug('Removing previous purchase orders listener');
+    purchaseOrdersListener();
+    purchaseOrdersListener = null;
+  }
+
+  // Listen for purchase orders using Firebase directly (purchaseOrders service not yet in NRD Data Access)
+  logger.debug('Setting up purchase orders listener');
+  const ordersRef = firebase.database().ref('purchaseOrders');
+  purchaseOrdersListener = () => ordersRef.off('value');
+  
+  ordersRef.on('value', (snapshot) => {
+    const orders = snapshot.val() || {};
+    logger.debug('Purchase orders data received', { count: Array.isArray(orders) ? orders.length : Object.keys(orders || {}).length });
+    if (!ordersList) return;
+    ordersList.innerHTML = '';
+    
+    // Convert to object format if needed
+    const ordersDict = Array.isArray(orders) 
+      ? orders.reduce((acc, order) => {
+          if (order && order.id) {
+            acc[order.id] = order;
+          }
+          return acc;
+        }, {})
+      : orders || {};
+
+    if (Object.keys(ordersDict).length === 0) {
+      ordersList.innerHTML = '<p class="text-center text-gray-600 py-6 sm:py-8 text-sm sm:text-base">No hay órdenes de compra registradas</p>';
+      return;
+    }
+
+    // Filter by search term if active
+    let ordersToShow = Object.entries(ordersDict);
+    if (purchaseOrdersSearchTerm.trim()) {
+      const searchLower = purchaseOrdersSearchTerm.toLowerCase().trim();
+      ordersToShow = ordersToShow.filter(([id, order]) => {
+        const supplierName = order.supplierName ? order.supplierName.toLowerCase() : '';
+        const status = order.status ? order.status.toLowerCase() : '';
+        const orderNumber = order.orderNumber ? order.orderNumber.toLowerCase() : '';
+        
+        return supplierName.includes(searchLower) || 
+               status.includes(searchLower) ||
+               orderNumber.includes(searchLower);
+      });
+    }
+    
+    // Sort by date (newest first)
+    ordersToShow.sort(([idA, orderA], [idB, orderB]) => {
+      const dateA = orderA.createdAt || 0;
+      const dateB = orderB.createdAt || 0;
+      return dateB - dateA;
+    });
+    
+    if (ordersToShow.length === 0) {
+      ordersList.innerHTML = '<p class="text-center text-gray-600 py-6 sm:py-8 text-sm sm:text-base">No hay órdenes de compra que coincidan con la búsqueda</p>';
+      return;
+    }
+    
+    ordersToShow.forEach(([id, order]) => {
+      const item = document.createElement('div');
+      item.className = 'border border-gray-200 p-3 sm:p-4 md:p-6 hover:border-red-600 transition-colors cursor-pointer';
+      item.dataset.orderId = id;
+      
+      const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('es-ES') : 'N/A';
+      const status = order.status || 'Pendiente';
+      const statusColor = status === 'Completada' ? 'text-green-600' : status === 'Cancelada' ? 'text-red-600' : 'text-orange-600';
+      
+      item.innerHTML = `
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 mb-2 sm:mb-3">
+          <div class="text-base sm:text-lg font-light">
+            ${order.orderNumber ? `Orden #${escapeHtml(order.orderNumber)}` : `Orden ${id.substring(0, 8)}`}
+          </div>
+          <span class="px-2 sm:px-3 py-0.5 sm:py-1 text-xs uppercase tracking-wider border ${statusColor} border-current">
+            ${escapeHtml(status)}
+          </span>
+        </div>
+        <div class="text-xs sm:text-sm text-gray-600 space-y-0.5 sm:space-y-1">
+          ${order.supplierName ? `<div>Proveedor: ${escapeHtml(order.supplierName)}</div>` : ''}
+          <div>Fecha: ${date}</div>
+          <div class="text-red-600 font-medium">Total: $${parseFloat(order.total || 0).toFixed(2)}</div>
+        </div>
+      `;
+      item.addEventListener('click', () => viewPurchaseOrder(id));
+      ordersList.appendChild(item);
+    });
+  }, (error) => {
+    logger.error('Error loading purchase orders', error);
+    ordersList.innerHTML = '<p class="text-center text-red-600 py-6 sm:py-8 text-sm sm:text-base">Error al cargar órdenes de compra</p>';
+  });
+}
+
+// Show purchase order form
+function showPurchaseOrderForm(orderId = null) {
+  const form = document.getElementById('purchase-order-form');
+  const list = document.getElementById('purchase-orders-list');
+  const header = document.querySelector('#purchase-orders-view .flex.flex-col');
+  const detail = document.getElementById('purchase-order-detail');
+  const title = document.getElementById('purchase-order-form-title');
+  const formElement = document.getElementById('purchase-order-form-element');
+  
+  if (form) form.classList.remove('hidden');
+  if (list) list.style.display = 'none';
+  if (header) header.style.display = 'none';
+  if (detail) detail.classList.add('hidden');
+  
+  if (formElement) {
+    formElement.reset();
+    const orderIdInput = document.getElementById('purchase-order-id');
+    if (orderIdInput) orderIdInput.value = orderId || '';
+  }
+
+  const formHeader = document.getElementById('purchase-order-form-header');
+  const subtitle = document.getElementById('purchase-order-form-subtitle');
+  const saveBtn = document.getElementById('save-purchase-order-btn');
+  
+  if (orderId) {
+    if (title) title.textContent = 'Editar Orden de Compra';
+    if (subtitle) subtitle.textContent = 'Modifique la información de la orden de compra';
+    if (formHeader) {
+      formHeader.classList.remove('bg-green-600', 'bg-gray-600');
+      formHeader.classList.add('bg-blue-600');
+    }
+    if (saveBtn) {
+      saveBtn.classList.remove('bg-green-600', 'border-green-600', 'hover:bg-green-700');
+      saveBtn.classList.add('bg-blue-600', 'border-blue-600', 'hover:bg-blue-700');
+    }
+    // Load order data
+    (async () => {
+      const snapshot = await firebase.database().ref(`purchaseOrders/${orderId}`).once('value');
+      const order = snapshot.val();
+      if (order) {
+        order.id = orderId;
+        const numberInput = document.getElementById('purchase-order-number');
+        const supplierInput = document.getElementById('purchase-order-supplier');
+        const supplierSearchInput = document.getElementById('purchase-order-supplier-search');
+        const statusInput = document.getElementById('purchase-order-status');
+        
+        if (numberInput) numberInput.value = order.orderNumber || '';
+        if (supplierInput) supplierInput.value = order.supplierId || '';
+        if (supplierSearchInput) supplierSearchInput.value = order.supplierName || '';
+        if (statusInput) statusInput.value = order.status || 'Pendiente';
+      }
+    })();
+  } else {
+    if (title) title.textContent = 'Nueva Orden de Compra';
+    if (subtitle) subtitle.textContent = 'Cree una nueva orden de compra';
+    if (formHeader) {
+      formHeader.classList.remove('bg-blue-600', 'bg-gray-600');
+      formHeader.classList.add('bg-green-600');
+    }
+    if (saveBtn) {
+      saveBtn.classList.remove('bg-blue-600', 'border-blue-600', 'hover:bg-blue-700');
+      saveBtn.classList.add('bg-green-600', 'border-green-600', 'hover:bg-green-700');
+    }
+  }
+}
+
+// Hide purchase order form
+function hidePurchaseOrderForm() {
+  const form = document.getElementById('purchase-order-form');
+  const list = document.getElementById('purchase-orders-list');
+  const header = document.querySelector('#purchase-orders-view .flex.flex-col');
+  
+  if (form) form.classList.add('hidden');
+  if (list) list.style.display = 'block';
+  if (header) header.style.display = 'flex';
+}
+
+// View purchase order detail
+async function viewPurchaseOrder(orderId) {
+  logger.debug('Viewing purchase order', { orderId });
+  showSpinner('Cargando orden de compra...');
+  try {
+    const snapshot = await firebase.database().ref(`purchaseOrders/${orderId}`).once('value');
+    const order = snapshot.val();
+    if (order) order.id = orderId;
+    hideSpinner();
+    if (!order) {
+      logger.warn('Purchase order not found', { orderId });
+      await showError('Orden de compra no encontrada');
+      return;
+    }
+    logger.debug('Purchase order loaded successfully', { orderId });
+
+    const list = document.getElementById('purchase-orders-list');
+    const header = document.querySelector('#purchase-orders-view .flex.flex-col');
+    const form = document.getElementById('purchase-order-form');
+    const detail = document.getElementById('purchase-order-detail');
+    
+    if (list) list.style.display = 'none';
+    if (header) header.style.display = 'none';
+    if (form) form.classList.add('hidden');
+    if (detail) detail.classList.remove('hidden');
+
+    const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('es-ES') : 'N/A';
+    const status = order.status || 'Pendiente';
+    const statusColor = status === 'Completada' ? 'text-green-600' : status === 'Cancelada' ? 'text-red-600' : 'text-orange-600';
+    
+    let itemsHtml = '';
+    if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+      itemsHtml = order.items.map(item => `
+        <div class="flex justify-between py-2 border-b border-gray-200">
+          <span class="text-sm">${escapeHtml(item.productName || 'Producto')} x ${item.quantity || 0}</span>
+          <span class="text-sm font-medium">$${parseFloat(item.price || 0).toFixed(2)}</span>
+        </div>
+      `).join('');
+    } else {
+      itemsHtml = '<p class="text-sm text-gray-500 py-2">No hay items en esta orden</p>';
+    }
+
+    document.getElementById('purchase-order-detail-content').innerHTML = `
+      <div class="space-y-3 sm:space-y-4">
+        <div class="flex justify-between py-2 sm:py-3 border-b border-gray-200">
+          <span class="text-gray-600 font-light text-sm sm:text-base">Número de Orden:</span>
+          <span class="font-light text-sm sm:text-base">${order.orderNumber ? escapeHtml(order.orderNumber) : orderId.substring(0, 8)}</span>
+        </div>
+        ${order.supplierName ? `
+        <div class="flex justify-between py-2 sm:py-3 border-b border-gray-200">
+          <span class="text-gray-600 font-light text-sm sm:text-base">Proveedor:</span>
+          <span class="font-light text-sm sm:text-base">${escapeHtml(order.supplierName)}</span>
+        </div>
+        ` : ''}
+        <div class="flex justify-between py-2 sm:py-3 border-b border-gray-200">
+          <span class="text-gray-600 font-light text-sm sm:text-base">Fecha:</span>
+          <span class="font-light text-sm sm:text-base">${date}</span>
+        </div>
+        <div class="flex justify-between py-2 sm:py-3 border-b border-gray-200">
+          <span class="text-gray-600 font-light text-sm sm:text-base">Estado:</span>
+          <span class="px-2 sm:px-3 py-0.5 sm:py-1 text-xs uppercase tracking-wider border ${statusColor} border-current">
+            ${escapeHtml(status)}
+          </span>
+        </div>
+        <div class="py-2 sm:py-3 border-b border-gray-200">
+          <div class="text-gray-600 font-light text-sm sm:text-base mb-2">Items:</div>
+          ${itemsHtml}
+        </div>
+        <div class="flex justify-between py-2 sm:py-3 border-b border-gray-200">
+          <span class="text-gray-600 font-light text-sm sm:text-base font-medium">Total:</span>
+          <span class="font-light text-sm sm:text-base text-red-600 font-medium">$${parseFloat(order.total || 0).toFixed(2)}</span>
+        </div>
+      </div>
+    `;
+
+    // Attach button handlers
+    const editBtn = document.getElementById('edit-purchase-order-detail-btn');
+    const deleteBtn = document.getElementById('delete-purchase-order-detail-btn');
+    
+    if (editBtn) {
+      editBtn.onclick = () => {
+        detail.classList.add('hidden');
+        showPurchaseOrderForm(orderId);
+      };
+    }
+    
+    if (deleteBtn) {
+      deleteBtn.onclick = () => deletePurchaseOrderHandler(orderId);
+    }
+  } catch (error) {
+    hideSpinner();
+    await showError('Error al cargar orden de compra: ' + error.message);
+  }
+}
+
+// Save purchase order
+async function savePurchaseOrder(orderId, orderData) {
+  const user = getCurrentUser();
+  const ordersRef = firebase.database().ref('purchaseOrders');
+  
+  if (orderId) {
+    logger.info('Updating purchase order', { orderId });
+    await ordersRef.child(orderId).update(orderData);
+    logger.audit('ENTITY_UPDATE', { entity: 'purchaseOrder', id: orderId, data: orderData, uid: user?.uid, email: user?.email, timestamp: Date.now() });
+    logger.info('Purchase order updated successfully', { orderId });
+    return { key: orderId };
+  } else {
+    logger.info('Creating new purchase order', { supplierId: orderData.supplierId });
+    const newRef = ordersRef.push();
+    orderData.createdAt = Date.now();
+    await newRef.set(orderData);
+    const id = newRef.key;
+    logger.audit('ENTITY_CREATE', { entity: 'purchaseOrder', id, data: orderData, uid: user?.uid, email: user?.email, timestamp: Date.now() });
+    logger.info('Purchase order created successfully', { id });
+    return { key: id, getKey: () => id };
+  }
+}
+
+// Purchase order form submit handler
+const purchaseOrderFormElement = document.getElementById('purchase-order-form-element');
+if (purchaseOrderFormElement) {
+  purchaseOrderFormElement.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const orderId = document.getElementById('purchase-order-id').value;
+    const orderNumber = document.getElementById('purchase-order-number').value.trim();
+    const supplierId = document.getElementById('purchase-order-supplier').value;
+    const status = document.getElementById('purchase-order-status').value;
+
+    if (!supplierId) {
+      await showError('El proveedor es requerido');
+      return;
+    }
+
+    // Get supplier name
+    let supplierName = '';
+    if (supplierId) {
+      try {
+        const supplier = await nrd.suppliers.getById(supplierId);
+        supplierName = supplier ? supplier.name : '';
+      } catch (error) {
+        logger.error('Error loading supplier', error);
+      }
+    }
+
+    showSpinner('Guardando orden de compra...');
+    try {
+      const orderData = {
+        supplierId,
+        supplierName,
+        status: status || 'Pendiente',
+        total: 0,
+        items: []
+      };
+      if (orderNumber) orderData.orderNumber = orderNumber;
+      
+      await savePurchaseOrder(orderId || null, orderData);
+      hideSpinner();
+      hidePurchaseOrderForm();
+    } catch (error) {
+      hideSpinner();
+      await showError('Error al guardar orden de compra: ' + error.message);
+    }
+  });
+}
+
+// Back to purchase orders list
+function backToPurchaseOrders() {
+  const list = document.getElementById('purchase-orders-list');
+  const header = document.querySelector('#purchase-orders-view .flex.flex-col');
+  const detail = document.getElementById('purchase-order-detail');
+  
+  if (list) list.style.display = 'block';
+  if (header) header.style.display = 'flex';
+  if (detail) detail.classList.add('hidden');
+}
+
+// Delete purchase order handler
+async function deletePurchaseOrderHandler(orderId) {
+  logger.debug('Delete purchase order requested', { orderId });
+  const confirmed = await showConfirm('Eliminar Orden de Compra', '¿Está seguro de eliminar esta orden de compra?');
+  if (!confirmed) {
+    logger.debug('Purchase order deletion cancelled', { orderId });
+    return;
+  }
+
+  const user = getCurrentUser();
+  logger.info('Deleting purchase order', { orderId });
+  showSpinner('Eliminando orden de compra...');
+  try {
+    await firebase.database().ref(`purchaseOrders/${orderId}`).remove();
+    logger.audit('ENTITY_DELETE', { entity: 'purchaseOrder', id: orderId, uid: user?.uid, email: user?.email, timestamp: Date.now() });
+    logger.info('Purchase order deleted successfully', { orderId });
+    hideSpinner();
+    backToPurchaseOrders();
+  } catch (error) {
+    hideSpinner();
+    logger.error('Failed to delete purchase order', error);
+    await showError('Error al eliminar orden de compra: ' + error.message);
+  }
+}
+
+// Setup supplier search in purchase order form
+function setupSupplierSearch() {
+  const supplierSearchInput = document.getElementById('purchase-order-supplier-search');
+  const supplierHiddenInput = document.getElementById('purchase-order-supplier');
+  const supplierResults = document.getElementById('purchase-order-supplier-search-results');
+  
+  if (!supplierSearchInput || !supplierHiddenInput || !supplierResults) return;
+  
+  let searchTimeout = null;
+  
+  supplierSearchInput.addEventListener('input', (e) => {
+    const searchTerm = e.target.value.trim();
+    
+    clearTimeout(searchTimeout);
+    
+    if (searchTerm.length < 2) {
+      supplierResults.classList.add('hidden');
+      supplierHiddenInput.value = '';
+      return;
+    }
+    
+    searchTimeout = setTimeout(async () => {
+      try {
+        const suppliersArray = await nrd.suppliers.getAll();
+        const suppliers = Array.isArray(suppliersArray) 
+          ? suppliersArray.reduce((acc, supplier) => {
+              if (supplier && supplier.id) {
+                acc[supplier.id] = supplier;
+              }
+              return acc;
+            }, {})
+          : suppliersArray || {};
+        
+        const matches = Object.entries(suppliers)
+          .filter(([id, supplier]) => {
+            const name = (supplier.name || '').toLowerCase();
+            return name.includes(searchTerm.toLowerCase());
+          })
+          .slice(0, 10);
+        
+        if (matches.length === 0) {
+          supplierResults.innerHTML = '<div class="p-2 text-sm text-gray-500">No se encontraron proveedores</div>';
+          supplierResults.classList.remove('hidden');
+          return;
+        }
+        
+        supplierResults.innerHTML = matches.map(([id, supplier]) => `
+          <div class="p-2 hover:bg-gray-100 cursor-pointer border-b border-gray-200" data-supplier-id="${id}" data-supplier-name="${escapeHtml(supplier.name)}">
+            <div class="font-medium text-sm">${escapeHtml(supplier.name)}</div>
+            ${supplier.phone ? `<div class="text-xs text-gray-500">${escapeHtml(supplier.phone)}</div>` : ''}
+          </div>
+        `).join('');
+        
+        supplierResults.classList.remove('hidden');
+        
+        // Add click handlers
+        supplierResults.querySelectorAll('[data-supplier-id]').forEach(item => {
+          item.addEventListener('click', () => {
+            const supplierId = item.dataset.supplierId;
+            const supplierName = item.dataset.supplierName;
+            supplierHiddenInput.value = supplierId;
+            supplierSearchInput.value = supplierName;
+            supplierResults.classList.add('hidden');
+          });
+        });
+      } catch (error) {
+        logger.error('Error searching suppliers', error);
+      }
+    }, 300);
+  });
+  
+  // Hide results when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!supplierSearchInput.contains(e.target) && !supplierResults.contains(e.target)) {
+      supplierResults.classList.add('hidden');
+    }
+  });
+}
+
+// Setup event listeners
+function setupPurchaseOrderEventListeners() {
+  // Setup supplier search
+  setupSupplierSearch();
+  
+  // Search input
+  const searchInput = document.getElementById('purchase-orders-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      purchaseOrdersSearchTerm = e.target.value;
+      loadPurchaseOrders();
+    });
+  }
+
+  // New order button
+  const newBtn = document.getElementById('new-purchase-order-btn');
+  if (newBtn) {
+    newBtn.addEventListener('click', () => {
+      showPurchaseOrderForm();
+    });
+  }
+
+  // Cancel button
+  const cancelBtn = document.getElementById('cancel-purchase-order-btn');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      hidePurchaseOrderForm();
+    });
+  }
+
+  // Close form button
+  const closeBtn = document.getElementById('close-purchase-order-form');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      hidePurchaseOrderForm();
+    });
+  }
+
+  // Back button
+  const backBtn = document.getElementById('back-to-purchase-orders');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      backToPurchaseOrders();
+    });
+  }
+
+  // Close detail button
+  const closeDetailBtn = document.getElementById('close-purchase-order-detail-btn');
+  if (closeDetailBtn) {
+    closeDetailBtn.addEventListener('click', () => {
+      backToPurchaseOrders();
+    });
+  }
+}
+
+// Initialize purchase orders module
+function initializePurchaseOrders() {
+  logger.debug('Initializing purchase orders module');
+  setupPurchaseOrderEventListeners();
+  loadPurchaseOrders();
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializePurchaseOrders);
+} else {
+  initializePurchaseOrders();
+}

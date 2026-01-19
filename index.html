@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sistema de gestión de compras">
+  <title>NRD Compras</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="styles.css?v=1">
+  <meta name="theme-color" content="#dc2626">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  
+  <script>
+    (function() {
+      const stylesheet = document.querySelector('link[href*="styles.css"]');
+      const versionMatch = stylesheet ? stylesheet.href.match(/[?&]v=(\d+)/) : null;
+      const currentVersion = versionMatch ? versionMatch[1] : Date.now();
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlVersion = urlParams.get('v');
+      if (urlVersion !== currentVersion) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('v', currentVersion);
+        window.location.replace(url.toString());
+      }
+    })();
+  </script>
+</head>
+<body class="bg-white text-black font-sans antialiased">
+  <!-- Loading Spinner -->
+  <div id="loading-spinner" class="fixed inset-0 bg-black/20 z-50 hidden flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 flex flex-col items-center gap-4 shadow-lg">
+      <div class="w-12 h-12 border-4 border-gray-200 border-t-red-600 rounded-full animate-spin"></div>
+      <p class="text-sm text-gray-600 font-light">Cargando...</p>
+    </div>
+  </div>
+
+  <!-- Login Screen -->
+  <div id="login-screen" class="min-h-screen flex items-center justify-center p-4 sm:p-6">
+    <div class="w-full max-w-sm">
+      <h1 class="text-xl sm:text-2xl font-light text-center mb-6 sm:mb-8 tracking-tight">NRD Compras</h1>
+      <form id="login-form" class="space-y-3 sm:space-y-4">
+        <input type="email" id="login-email" placeholder="Email" required 
+          class="w-full px-0 py-2.5 sm:py-3 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
+        <input type="password" id="login-password" placeholder="Contraseña" required autocomplete="current-password"
+          class="w-full px-0 py-2.5 sm:py-3 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
+        <button type="submit" 
+          class="w-full mt-4 sm:mt-6 py-2.5 sm:py-3 bg-red-600 text-white border border-red-600 hover:bg-red-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+          Iniciar Sesión
+        </button>
+      </form>
+      <div id="login-error" class="mt-3 sm:mt-4 text-center text-xs sm:text-sm text-gray-600"></div>
+    </div>
+  </div>
+
+  <!-- Main App Screen -->
+  <div id="app-screen" class="min-h-screen flex flex-col hidden">
+    <header class="bg-red-600 border-b border-red-700 px-3 sm:px-4 py-2.5 sm:py-3 flex justify-between items-center sticky top-0 z-10">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <img src="icon-192.png" alt="NRD Compras" class="w-8 h-8 sm:w-10 sm:h-10 rounded">
+        <h1 class="text-lg sm:text-xl font-light tracking-tight text-white">NRD Compras</h1>
+      </div>
+      <div class="flex gap-2 items-center">
+        <button id="install-btn" 
+          class="px-3 sm:px-4 py-1.5 sm:py-2 border border-white/30 hover:border-white text-white hover:bg-white/10 transition-colors uppercase tracking-wider text-xs font-light hidden">
+          Instalar
+        </button>
+        <button id="profile-btn" 
+          class="px-3 sm:px-4 py-1.5 sm:py-2 border border-white/30 hover:border-white text-white hover:bg-white/10 transition-colors uppercase tracking-wider text-xs font-light">
+          Perfil
+        </button>
+      </div>
+    </header>
+
+    <nav class="bg-white border-b border-gray-200 flex overflow-x-auto sticky top-[45px] sm:top-[53px] z-10">
+      <button class="nav-btn flex-1 px-3 sm:px-4 py-3 sm:py-3.5 border-b-2 border-red-600 text-red-600 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light" data-view="purchase-orders">Órdenes</button>
+      <button class="nav-btn flex-1 px-3 sm:px-4 py-3 sm:py-3.5 border-b-2 border-transparent text-gray-600 hover:text-red-600 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light" data-view="suppliers">Proveedores</button>
+    </nav>
+
+    <main class="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto max-w-6xl mx-auto w-full">
+      <!-- Purchase Orders View -->
+      <div id="purchase-orders-view" class="view space-y-3 sm:space-y-4">
+        <div class="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2 sm:gap-0 mb-2 sm:mb-3">
+          <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+            <button id="new-purchase-order-btn" 
+              class="w-full sm:w-auto px-4 sm:px-6 py-2 bg-red-600 text-white border border-red-600 hover:bg-red-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+              Nueva Orden
+            </button>
+          </div>
+        </div>
+        
+        <!-- Search Filter -->
+        <div class="mb-3 sm:mb-4">
+          <input type="text" id="purchase-orders-search-input" 
+            placeholder="Buscar órdenes por proveedor, número, estado..." 
+            class="w-full px-3 py-2 border border-gray-300 focus:outline-none focus:border-red-600 bg-white text-sm sm:text-base rounded">
+        </div>
+        
+        <div id="purchase-orders-list" class="space-y-2 sm:space-y-3"></div>
+
+        <!-- Purchase Order Detail View -->
+        <div id="purchase-order-detail" class="border border-gray-200 p-3 sm:p-4 md:p-6 hidden overflow-hidden">
+          <div id="purchase-order-detail-header" class="px-4 sm:px-6 py-4 sm:py-5 -mx-3 sm:-mx-4 md:-mx-6 -mt-3 sm:-mt-4 md:-mt-6 mb-3 sm:mb-4 bg-gray-600">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-lg sm:text-xl font-semibold tracking-tight text-white">Detalle de la Orden de Compra</h3>
+                <p class="text-sm text-white/90 mt-1">Visualice la información completa de la orden</p>
+              </div>
+              <button id="close-purchase-order-detail-btn" 
+                class="text-white hover:text-gray-200 text-2xl font-light w-8 h-8 flex items-center justify-center hover:bg-white/20 transition-colors">×</button>
+            </div>
+          </div>
+          <div id="purchase-order-detail-content"></div>
+          <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-200">
+            <button id="edit-purchase-order-detail-btn" 
+              class="flex-1 px-4 sm:px-6 py-2 bg-blue-600 text-white border border-blue-600 hover:bg-blue-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+              Editar
+            </button>
+            <button id="delete-purchase-order-detail-btn" 
+              class="flex-1 px-4 sm:px-6 py-2 border border-gray-300 hover:border-red-600 hover:text-red-600 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+              Eliminar
+            </button>
+            <button id="back-to-purchase-orders" 
+              class="flex-1 px-4 sm:px-6 py-2 bg-gray-600 text-white border border-gray-600 hover:bg-gray-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <!-- Purchase Order Form -->
+        <div id="purchase-order-form" class="border border-gray-200 p-3 sm:p-4 md:p-6 mt-3 sm:mt-4 hidden overflow-hidden">
+          <div id="purchase-order-form-header" class="px-4 sm:px-6 py-4 sm:py-5 -mx-3 sm:-mx-4 md:-mx-6 -mt-3 sm:-mt-4 md:-mt-6 mb-3 sm:mb-4 bg-green-600">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 id="purchase-order-form-title" class="text-lg sm:text-xl font-semibold tracking-tight text-white">Nueva Orden de Compra</h3>
+                <p id="purchase-order-form-subtitle" class="text-sm text-white/90 mt-1">Cree una nueva orden de compra</p>
+              </div>
+              <button id="close-purchase-order-form" class="text-white hover:text-gray-200 text-2xl font-light w-8 h-8 flex items-center justify-center hover:bg-white/20 transition-colors">×</button>
+            </div>
+          </div>
+          <form id="purchase-order-form-element">
+            <input type="hidden" id="purchase-order-id">
+            <div class="mb-4 sm:mb-6">
+              <label class="block mb-1.5 sm:mb-2 text-xs uppercase tracking-wider text-gray-600">Número de Orden</label>
+              <input type="text" id="purchase-order-number" 
+                class="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base"
+                placeholder="Número de orden (opcional)">
+            </div>
+            <div class="mb-4 sm:mb-6">
+              <label class="block mb-1.5 sm:mb-2 text-xs uppercase tracking-wider text-gray-600">Proveedor *</label>
+              <div class="relative">
+                <input type="text" id="purchase-order-supplier-search" placeholder="Buscar proveedor..." 
+                  class="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
+                <input type="hidden" id="purchase-order-supplier" required>
+                <div id="purchase-order-supplier-search-results" 
+                  class="hidden absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-60 overflow-y-auto">
+                </div>
+              </div>
+            </div>
+            <div class="mb-4 sm:mb-6">
+              <label class="block mb-1.5 sm:mb-2 text-xs uppercase tracking-wider text-gray-600">Estado</label>
+              <select id="purchase-order-status" 
+                class="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
+                <option value="Pendiente">Pendiente</option>
+                <option value="Completada">Completada</option>
+                <option value="Cancelada">Cancelada</option>
+              </select>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 pt-4 sm:pt-6 border-t border-gray-200">
+              <button type="submit" id="save-purchase-order-btn"
+                class="flex-1 px-4 sm:px-6 py-2 bg-green-600 text-white border border-green-600 hover:bg-green-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+                Guardar
+              </button>
+              <button type="button" id="cancel-purchase-order-btn" 
+                class="flex-1 px-4 sm:px-6 py-2 border border-gray-300 hover:border-red-600 hover:text-red-600 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Suppliers View -->
+      <div id="suppliers-view" class="view space-y-3 sm:space-y-4 hidden">
+        <div class="flex flex-col sm:flex-row justify-end items-start sm:items-center gap-2 sm:gap-0 mb-2 sm:mb-3">
+          <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+            <button id="new-supplier-btn" 
+              class="w-full sm:w-auto px-4 sm:px-6 py-2 bg-red-600 text-white border border-red-600 hover:bg-red-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+              Nuevo Proveedor
+            </button>
+          </div>
+        </div>
+        
+        <!-- Search Filter -->
+        <div class="mb-3 sm:mb-4">
+          <input type="text" id="suppliers-search-input" 
+            placeholder="Buscar proveedores por nombre, teléfono, email..." 
+            class="w-full px-3 py-2 border border-gray-300 focus:outline-none focus:border-red-600 bg-white text-sm sm:text-base rounded">
+        </div>
+        
+        <div id="suppliers-list" class="space-y-2 sm:space-y-3"></div>
+
+        <!-- Supplier Detail View -->
+        <div id="supplier-detail" class="border border-gray-200 p-3 sm:p-4 md:p-6 hidden overflow-hidden">
+          <div id="supplier-detail-header" class="px-4 sm:px-6 py-4 sm:py-5 -mx-3 sm:-mx-4 md:-mx-6 -mt-3 sm:-mt-4 md:-mt-6 mb-3 sm:mb-4 bg-gray-600">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-lg sm:text-xl font-semibold tracking-tight text-white">Detalle del Proveedor</h3>
+                <p class="text-sm text-white/90 mt-1">Visualice la información completa del proveedor</p>
+              </div>
+              <button id="close-supplier-detail-btn" 
+                class="text-white hover:text-gray-200 text-2xl font-light w-8 h-8 flex items-center justify-center hover:bg-white/20 transition-colors">×</button>
+            </div>
+          </div>
+          <div id="supplier-detail-content"></div>
+          <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-200">
+            <button id="edit-supplier-detail-btn" 
+              class="flex-1 px-4 sm:px-6 py-2 bg-blue-600 text-white border border-blue-600 hover:bg-blue-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+              Editar
+            </button>
+            <button id="delete-supplier-detail-btn" 
+              class="flex-1 px-4 sm:px-6 py-2 border border-gray-300 hover:border-red-600 hover:text-red-600 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+              Eliminar
+            </button>
+            <button id="back-to-suppliers" 
+              class="flex-1 px-4 sm:px-6 py-2 bg-gray-600 text-white border border-gray-600 hover:bg-gray-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <!-- Supplier Form -->
+        <div id="supplier-form" class="border border-gray-200 p-3 sm:p-4 md:p-6 mt-3 sm:mt-4 hidden overflow-hidden">
+          <div id="supplier-form-header" class="px-4 sm:px-6 py-4 sm:py-5 -mx-3 sm:-mx-4 md:-mx-6 -mt-3 sm:-mt-4 md:-mt-6 mb-3 sm:mb-4 bg-green-600">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 id="supplier-form-title" class="text-lg sm:text-xl font-semibold tracking-tight text-white">Nuevo Proveedor</h3>
+                <p id="supplier-form-subtitle" class="text-sm text-white/90 mt-1">Registre la información del nuevo proveedor</p>
+              </div>
+              <button id="close-supplier-form" class="text-white hover:text-gray-200 text-2xl font-light w-8 h-8 flex items-center justify-center hover:bg-white/20 transition-colors">×</button>
+            </div>
+          </div>
+          <form id="supplier-form-element">
+            <input type="hidden" id="supplier-id">
+            <div class="mb-4 sm:mb-6">
+              <label class="block mb-1.5 sm:mb-2 text-xs uppercase tracking-wider text-gray-600">Nombre *</label>
+              <input type="text" id="supplier-name" required 
+                class="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
+            </div>
+            <div class="mb-4 sm:mb-6">
+              <label class="block mb-1.5 sm:mb-2 text-xs uppercase tracking-wider text-gray-600">Teléfono</label>
+              <input type="text" id="supplier-phone" 
+                class="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
+            </div>
+            <div class="mb-4 sm:mb-6">
+              <label class="block mb-1.5 sm:mb-2 text-xs uppercase tracking-wider text-gray-600">Email</label>
+              <input type="email" id="supplier-email" 
+                class="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
+            </div>
+            <div class="mb-4 sm:mb-6">
+              <label class="block mb-1.5 sm:mb-2 text-xs uppercase tracking-wider text-gray-600">Dirección</label>
+              <input type="text" id="supplier-address" 
+                class="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base">
+            </div>
+            <div class="mb-4 sm:mb-6">
+              <label class="block mb-1.5 sm:mb-2 text-xs uppercase tracking-wider text-gray-600">Descripción</label>
+              <textarea id="supplier-description" rows="3"
+                class="w-full px-0 py-2 border-0 border-b border-gray-300 focus:outline-none focus:border-red-600 bg-transparent text-sm sm:text-base"></textarea>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 pt-4 sm:pt-6 border-t border-gray-200">
+              <button type="submit" id="save-supplier-btn"
+                class="flex-1 px-4 sm:px-6 py-2 bg-green-600 text-white border border-green-600 hover:bg-green-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+                Guardar
+              </button>
+              <button type="button" id="cancel-supplier-btn" 
+                class="flex-1 px-4 sm:px-6 py-2 border border-gray-300 hover:border-red-600 hover:text-red-600 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Profile Modal -->
+  <div id="profile-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-lg">
+      <div class="p-4 sm:p-6 border-b border-gray-200 flex items-center justify-between">
+        <h3 class="text-lg sm:text-xl font-light tracking-tight">Perfil de Usuario</h3>
+        <button id="close-profile-modal" class="text-gray-400 hover:text-red-600 text-xl font-light">×</button>
+      </div>
+      <div id="profile-modal-content" class="p-4 sm:p-6 space-y-4">
+        <!-- User data will be inserted here -->
+      </div>
+      <div class="p-4 sm:p-6 border-t border-gray-200 space-y-2">
+        <a href="https://yosbany.github.io/nrd-portal" 
+          class="block w-full px-4 sm:px-6 py-2 bg-blue-600 text-white border border-blue-600 hover:bg-blue-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light text-center">
+          Ir al Portal
+        </a>
+        <button id="profile-logout-btn" 
+          class="w-full px-4 sm:px-6 py-2 bg-red-600 text-white border border-red-600 hover:bg-red-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light">
+          Cerrar Sesión
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Modal -->
+  <div id="custom-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-lg">
+      <div class="p-4 sm:p-6">
+        <h3 id="modal-title" class="text-lg sm:text-xl font-light mb-3 sm:mb-4 text-black"></h3>
+        <p id="modal-message" class="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6"></p>
+        <div class="flex gap-2">
+          <button id="modal-confirm" class="flex-1 px-4 py-2 bg-red-600 text-white hover:bg-red-700 transition-colors uppercase tracking-wider text-xs font-light">
+            Confirmar
+          </button>
+          <button id="modal-cancel" class="flex-1 px-4 py-2 border border-gray-300 hover:border-red-600 hover:text-red-600 transition-colors uppercase tracking-wider text-xs font-light">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Alert -->
+  <div id="custom-alert" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-md w-full border border-gray-200 shadow-lg">
+      <div class="p-4 sm:p-6">
+        <h3 id="alert-title" class="text-lg sm:text-xl font-light mb-3 sm:mb-4 text-black"></h3>
+        <p id="alert-message" class="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6"></p>
+        <button id="alert-ok" class="w-full px-4 py-2 bg-red-600 text-white hover:bg-red-700 transition-colors uppercase tracking-wider text-xs font-light">
+          Aceptar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  
+  <!-- NRD Data Access Library -->
+  <script src="https://cdn.jsdelivr.net/gh/yosbany/nrd-data-access@main/dist/nrd-data-access.js"></script>
+  
+  <!-- Firebase Configuration and Initialization -->
+  <script>
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyD02egBPI7FnsliANDKa8noTkVmGMW0POg",
+      authDomain: "nrd-db.firebaseapp.com",
+      databaseURL: "https://nrd-db-default-rtdb.firebaseio.com",
+      projectId: "nrd-db",
+      storageBucket: "nrd-db.firebasestorage.app",
+      messagingSenderId: "544444461682",
+      appId: "1:544444461682:web:110c97ffffc984ddd208eb"
+    };
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    // Initialize NRD Data Access Library (make it global)
+    window.nrd = new NRDDataAccess();
+    const nrd = window.nrd; // For backward compatibility in this scope
+  </script>
+  
+  <!-- App Scripts -->
+  <script src="logger.js?v=1"></script>
+  <script src="modal.js?v=1"></script>
+  <script src="auth.js?v=1"></script>
+  <script src="tabs/purchase-orders.js?v=1"></script>
+  <script src="tabs/suppliers.js?v=1"></script>
+  <script src="app.js?v=1"></script>
+
+  <script>
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js?v=1')
+          .then(reg => {
+            logger.info('Service Worker registered');
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  console.log('New service worker available, reloading...');
+                  window.location.reload();
+                }
+              });
+            });
+            setInterval(() => {
+              reg.update();
+            }, 60000);
+            reg.update();
+          })
+          .catch(err => {
+            console.log('Service Worker registration failed:', err);
+          });
+      });
+    }
+
+    // PWA Install prompt
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('install-btn');
+
+    if (window.matchMedia('(display-mode: standalone)').matches || 
+        window.navigator.standalone === true) {
+      if (installBtn) installBtn.classList.add('hidden');
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (installBtn) {
+        installBtn.classList.remove('hidden');
+      }
+    });
+
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) {
+          alert('Para instalar la app, use el menú del navegador');
+          return;
+        }
+        try {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          if (installBtn) installBtn.classList.add('hidden');
+        } catch (error) {
+          console.error('Error showing install prompt:', error);
+        }
+      });
+    }
+
+    window.addEventListener('appinstalled', () => {
+      deferredPrompt = null;
+      if (installBtn) installBtn.classList.add('hidden');
+    });
+  </script>
+</body>
+</html>
