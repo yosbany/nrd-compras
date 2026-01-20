@@ -7,7 +7,7 @@
   <title>NRD Compras</title>
   <link rel="manifest" href="manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="styles.css?v=1768861766466">
+  <link rel="stylesheet" href="styles.css?v=1768907221907">
   <meta name="theme-color" content="#dc2626">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -36,8 +36,16 @@
     </div>
   </div>
 
+  <!-- Redirecting Screen -->
+  <div id="redirecting-screen" class="min-h-screen flex items-center justify-center bg-white">
+    <div class="flex flex-col items-center gap-4">
+      <div class="w-12 h-12 border-4 border-gray-200 border-t-red-600 rounded-full animate-spin"></div>
+      <p class="text-sm text-gray-600 font-light">Redirigiendo...</p>
+    </div>
+  </div>
+
   <!-- Login Screen -->
-  <div id="login-screen" class="min-h-screen flex items-center justify-center p-4 sm:p-6">
+  <div id="login-screen" class="min-h-screen flex items-center justify-center p-4 sm:p-6 hidden">
     <div class="w-full max-w-sm">
       <h1 class="text-xl sm:text-2xl font-light text-center mb-6 sm:mb-8 tracking-tight">NRD Compras</h1>
       <form id="login-form" class="space-y-3 sm:space-y-4">
@@ -408,18 +416,18 @@
   </script>
   
   <!-- App Scripts -->
-  <script src="logger.js?v=1768861766466"></script>
-  <script src="modal.js?v=1768861766466"></script>
-  <script src="auth.js?v=1768861766466"></script>
-  <script src="tabs/purchase-orders.js?v=1768861766466"></script>
-  <script src="tabs/suppliers.js?v=1768861766466"></script>
-  <script src="app.js?v=1768861766466"></script>
+  <script src="logger.js?v=1768907221907"></script>
+  <script src="modal.js?v=1768907221907"></script>
+  <script src="auth.js?v=1768907221907"></script>
+  <script src="tabs/purchase-orders.js?v=1768907221907"></script>
+  <script src="tabs/suppliers.js?v=1768907221907"></script>
+  <script src="app.js?v=1768907221907"></script>
 
   <script>
     // Register service worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js?v=1768861766466')
+        navigator.serviceWorker.register('service-worker.js?v=1768907221907')
           .then(reg => {
             logger.info('Service Worker registered');
             reg.addEventListener('updatefound', () => {
