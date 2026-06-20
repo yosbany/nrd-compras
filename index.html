@@ -7,7 +7,7 @@
   <title>NRD Compras</title>
   <link rel="manifest" href="manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="styles.css?v=1781979488392">
+  <link rel="stylesheet" href="styles.css?v=1781980090511">
   <meta name="theme-color" content="#dc2626">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -53,13 +53,7 @@
   </script>
 </head>
 <body class="bg-white text-black font-sans antialiased">
-  <!-- Loading Spinner -->
-  <div id="loading-spinner" class="fixed inset-0 bg-black/20 z-50 hidden flex items-center justify-center">
-    <div class="bg-white rounded-lg p-6 flex flex-col items-center gap-4 shadow-lg">
-      <div class="w-12 h-12 border-4 border-gray-200 border-t-red-600 rounded-full animate-spin"></div>
-      <p class="text-sm text-gray-600 font-light">Cargando...</p>
-    </div>
-  </div>
+  <!-- Spinner de procesamiento: inyectado por NRDCommon -->
 
   <!-- Redirecting Screen -->
   <div id="redirecting-screen" class="min-h-screen flex items-center justify-center bg-white">
@@ -437,8 +431,8 @@
   </script>
 
   <!-- App Scripts -->
-  <script src="logger.js?v=1781979488392"></script>
-  <script src="modal.js?v=1781979488392"></script>
+  <script src="logger.js?v=1781980090511"></script>
+  <script src="modal.js?v=1781980090511"></script>
   <script>
     (function(cfg) {
       var start = Date.now();
@@ -460,15 +454,15 @@
       }, 100);
     })({ appName: 'NRD Compras', legacyNrdAlias: true });
   </script>
-  <script src="tabs/purchase-orders.js?v=1781979488392"></script>
-  <script src="tabs/suppliers.js?v=1781979488392"></script>
-  <script src="app.js?v=1781979488392"></script>
+  <script src="tabs/purchase-orders.js?v=1781980090511"></script>
+  <script src="tabs/suppliers.js?v=1781980090511"></script>
+  <script src="app.js?v=1781980090511"></script>
 
   <script>
     // Register service worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js?v=1781979488392')
+        navigator.serviceWorker.register('service-worker.js?v=1781980090511')
           .then(reg => {
             logger.info('Service Worker registered');
             reg.addEventListener('updatefound', () => {
