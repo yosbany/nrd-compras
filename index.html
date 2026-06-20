@@ -7,7 +7,7 @@
   <title>NRD Compras</title>
   <link rel="manifest" href="manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="styles.css?v=1780057171740">
+  <link rel="stylesheet" href="styles.css?v=1781967492757">
   <meta name="theme-color" content="#dc2626">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
@@ -370,7 +370,7 @@
         <!-- User data will be inserted here -->
       </div>
       <div class="p-4 sm:p-6 border-t border-gray-200 space-y-2">
-        <a href="https://yosbany.github.io/nrd-portal" 
+        <a id="portal-link" href="/nrd-portal/" 
           class="block w-full px-4 sm:px-6 py-2 bg-blue-600 text-white border border-blue-600 hover:bg-blue-700 transition-colors uppercase tracking-wider text-xs sm:text-sm font-light text-center">
           Ir al Portal
         </a>
@@ -437,8 +437,8 @@
   </script>
 
   <!-- App Scripts -->
-  <script src="logger.js?v=1780057171740"></script>
-  <script src="modal.js?v=1780057171740"></script>
+  <script src="logger.js?v=1781967492757"></script>
+  <script src="modal.js?v=1781967492757"></script>
   <script>
     (function(cfg) {
       var start = Date.now();
@@ -460,15 +460,15 @@
       }, 100);
     })({ appName: 'NRD Compras', legacyNrdAlias: true });
   </script>
-  <script src="tabs/purchase-orders.js?v=1780057171740"></script>
-  <script src="tabs/suppliers.js?v=1780057171740"></script>
-  <script src="app.js?v=1780057171740"></script>
+  <script src="tabs/purchase-orders.js?v=1781967492757"></script>
+  <script src="tabs/suppliers.js?v=1781967492757"></script>
+  <script src="app.js?v=1781967492757"></script>
 
   <script>
     // Register service worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js?v=1780057171740')
+        navigator.serviceWorker.register('service-worker.js?v=1781967492757')
           .then(reg => {
             logger.info('Service Worker registered');
             reg.addEventListener('updatefound', () => {
