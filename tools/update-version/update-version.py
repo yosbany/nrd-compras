@@ -35,7 +35,7 @@ def update_version():
     )
     
     # Add version parameter to JS files (except Firebase CDN and external libraries)
-    js_files = ['logger.js', 'modal.js', 'auth.js', 'tabs/purchase-orders.js', 'tabs/suppliers.js', 'app.js']
+    js_files = ['logger.js', 'modal.js', 'tabs/purchase-orders.js', 'tabs/suppliers.js', 'app.js']
     for js_file in js_files:
         # Remove existing version parameter first
         html = re.sub(

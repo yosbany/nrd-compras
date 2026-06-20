@@ -68,3 +68,11 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
   });
 });
 logger.debug('Nav button handlers attached');
+
+(window.NRDCommon?.startApp || function(fn, opts) {
+  window.__nrdStartQueue = window.__nrdStartQueue || [];
+  window.__nrdStartQueue.push({ onReady: fn, options: opts || {} });
+})(function(user) {
+  logger.info('User authenticated, initializing app', { uid: user.uid, email: user.email });
+  switchView('purchase-orders');
+});

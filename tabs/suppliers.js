@@ -52,7 +52,7 @@ function loadSuppliers() {
 
   // Listen for suppliers using NRD Data Access
   logger.debug('Setting up suppliers listener');
-  suppliersListener = window.window.nrd.suppliers.onValue((suppliers) => {
+  suppliersListener = window.nrd.suppliers.onValue((suppliers) => {
     logger.debug('Suppliers data received', { count: Array.isArray(suppliers) ? suppliers.length : Object.keys(suppliers || {}).length });
     if (!suppliersList) return;
     suppliersList.innerHTML = '';
